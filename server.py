@@ -860,7 +860,92 @@ async def shopify_create_fulfillment(params: CreateFulfillmentInput) -> str:
     except Exception as e:
         return _error(e)
 
+# ═══════════════════════════════════════════════════════════════════════════
+# METAFIELDS (SEO meta descriptions, meta titles, custom data)
+# ═══════════════════════════════════════════════════════════════════════════
 
+class ListMetafieldsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    resource_type: str           = Field(..., description="Resource type: products, collections, customers, orders, shop")
+    resource_id:   Optional[int] = Field(default=None, description="Resource ID (omit for shop metafields)")
+    namespace:     Optional[str] = Field(default=None, description="Filter by namespace, e.g. 'global' for SEO fields")
+    limit:         Optional[int] = Field(default=50, ge=1, le=250)
+
+
+@mcp.tool(
+    name="shopify_list_metafields",
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
+)
+async def shopify_list_metafields(params: ListMetafieldsInput) -> str:
+    """List metafields for a resource (product, collection, customer, order, or shop).
+    For SEO meta descriptions use namespace='global' and key='description_tag'.
+    For SEO meta titles use namespace='global' and key='title_tag'."""
+    try:
+        if params.resource_id:
+            path = f"{params.resource_type}/{params.resource_id}/metafields.json"
+        else:
+            path = "metafields.json"
+        p: Dict[str, Any] = {"limit": params.limit}
+        if params.namespace:
+            p["namespace"] = params.namespace
+        data       = await _request("GET", path, params=p)
+        metafields = data.get("metafields", [])
+        return _fmt({"count": len(metafields), "metafields": metafields})
+    except Exception as e:
+        return _error(e)
+
+
+class UpsertMetafieldInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    resource_type: str           = Field(..., description="Resource type: products, collections, customers, orders, shop")
+    resource_id:   Optional[int] = Field(default=None, description="Resource ID (omit for shop metafields)")
+    namespace:     str           = Field(..., description="Metafield namespace, e.g. 'global' for SEO")
+    key:           str           = Field(..., description="Metafield key, e.g. 'description_tag' or 'title_tag'")
+    value:         str           = Field(..., description="Metafield value")
+    type:          Optional[str] = Field(default="single_line_text_field", description="Value type: single_line_text_field, multi_line_text_field, number_integer, json, etc.")
+
+
+@mcp.tool(
+    name="shopify_upsert_metafield",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
+)
+async def shopify_upsert_metafield(params: UpsertMetafieldInput) -> str:
+    """Create or update a metafield on a resource.
+    For SEO meta description: namespace='global', key='description_tag'
+    For SEO meta title: namespace='global', key='title_tag'"""
+    try:
+        if params.resource_id:
+            path = f"{params.resource_type}/{params.resource_id}/metafields.json"
+        else:
+            path = "metafields.json"
+        metafield: Dict[str, Any] = {
+            "namespace": params.namespace,
+            "key":       params.key,
+            "value":     params.value,
+            "type":      params.type,
+        }
+        data = await _request("POST", path, body={"metafield": metafield})
+        return _fmt(data.get("metafield", data))
+    except Exception as e:
+        return _error(e)
+
+
+class DeleteMetafieldInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    metafield_id: int = Field(..., description="Metafield ID to delete")
+
+
+@mcp.tool(
+    name="shopify_delete_metafield",
+    annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True},
+)
+async def shopify_delete_metafield(params: DeleteMetafieldInput) -> str:
+    """Delete a metafield by its ID. This cannot be undone."""
+    try:
+        await _request("DELETE", f"metafields/{params.metafield_id}.json")
+        return f"Metafield {params.metafield_id} deleted."
+    except Exception as e:
+        return _error(e)
 # ═══════════════════════════════════════════════════════════════════════════
 # SHOP INFO
 # ═══════════════════════════════════════════════════════════════════════════
