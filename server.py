@@ -1157,6 +1157,39 @@ async def shopify_delete_article(params: DeleteArticleInput) -> str:
     except Exception as e:
         return _error(e)
 
+# ═══════════════════════════════════════════════════════════════════════════
+# COLLECTIONS — UPDATE
+# ═══════════════════════════════════════════════════════════════════════════
+
+class UpdateCollectionInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    collection_id: int = Field(..., description="Collection ID to update")
+    collection_type: Optional[str] = Field(default="custom", description="'custom' or 'smart'")
+    title: Optional[str] = Field(default=None, description="Collection title")
+    body_html: Optional[str] = Field(default=None, description="Collection description in HTML")
+    handle: Optional[str] = Field(default=None, description="URL handle/slug")
+    published: Optional[bool] = Field(default=None, description="True to publish, False to hide")
+    sort_order: Optional[str] = Field(default=None, description="Sort order: manual, best-selling, alpha-asc, alpha-desc, price-asc, price-desc, created, created-desc")
+
+@mcp.tool(
+    name="shopify_update_collection",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
+)
+async def shopify_update_collection(params: UpdateCollectionInput) -> str:
+    """Update an existing collection. Works for both custom and smart collections.
+    Use body_html to update the collection description."""
+    try:
+        collection: Dict[str, Any] = {}
+        for field in ["title", "body_html", "handle", "published", "sort_order"]:
+            val = getattr(params, field)
+            if val is not None:
+                collection[field] = val
+        endpoint = "custom_collections" if params.collection_type == "custom" else "smart_collections"
+        data = await _request("PUT", f"{endpoint}/{params.collection_id}.json", body={endpoint[:-1]: collection})
+        key = "custom_collection" if params.collection_type == "custom" else "smart_collection"
+        return _fmt(data.get(key, data))
+    except Exception as e:
+        return _error(e)
 
 # ---------------------------------------------------------------------------
 # Entrypoint
