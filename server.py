@@ -1013,13 +1013,6 @@ async def shopify_create_webhook(params: CreateWebhookInput) -> str:
         return _fmt(data.get("webhook", data))
     except Exception as e:
         return _error(e)
-
-
-# ---------------------------------------------------------------------------
-# Entrypoint
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    mcp.run(transport=MCP_TRANSPORT)
 # ═══════════════════════════════════════════════════════════════════════════
 # BLOGS & ARTICLES
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1163,3 +1156,10 @@ async def shopify_delete_article(params: DeleteArticleInput) -> str:
         return f"Article {params.article_id} deleted from blog {params.blog_id}."
     except Exception as e:
         return _error(e)
+
+
+# ---------------------------------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    mcp.run(transport=MCP_TRANSPORT)
