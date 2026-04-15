@@ -859,7 +859,57 @@ async def shopify_create_fulfillment(params: CreateFulfillmentInput) -> str:
         return _fmt(data.get("fulfillment", data))
     except Exception as e:
         return _error(e)
+# ═══════════════════════════════════════════════════════════════════════════
+# INVENTORY ITEMS — preço de custo e detalhes de variante
+# ═══════════════════════════════════════════════════════════════════════════
 
+class GetInventoryItemInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    inventory_item_id: int = Field(..., description="Inventory item ID (available in product variants as inventory_item_id)")
+
+@mcp.tool(
+    name="shopify_get_inventory_item",
+    annotations={"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
+)
+async def shopify_get_inventory_item(params: GetInventoryItemInput) -> str:
+    """Get details of an inventory item including cost, SKU, and tracked status.
+    The inventory_item_id is available in product variants as the inventory_item_id field."""
+    try:
+        data = await _request("GET", f"inventory_items/{params.inventory_item_id}.json")
+        return _fmt(data.get("inventory_item", data))
+    except Exception as e:
+        return _error(e)
+
+
+class UpdateInventoryItemInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    inventory_item_id: int = Field(..., description="Inventory item ID to update")
+    cost: Optional[str] = Field(default=None, description="Cost price per unit, e.g. '3.50'. This is the official Shopify cost field shown in Inventory > Cost per item.")
+    tracked: Optional[bool] = Field(default=None, description="Whether inventory is tracked for this item")
+    sku: Optional[str] = Field(default=None, description="SKU (Stock Keeping Unit) for the variant")
+
+@mcp.tool(
+    name="shopify_update_inventory_item",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
+)
+async def shopify_update_inventory_item(params: UpdateInventoryItemInput) -> str:
+    """Update an inventory item. Use cost to set the official Shopify cost price per unit
+    (visible in admin under Inventory > Cost per item, used for margin reports).
+    Only provided fields are changed."""
+    try:
+        item: Dict[str, Any] = {"id": params.inventory_item_id}
+        for field in ["cost", "tracked", "sku"]:
+            val = getattr(params, field)
+            if val is not None:
+                item[field] = val
+        data = await _request(
+            "PUT",
+            f"inventory_items/{params.inventory_item_id}.json",
+            body={"inventory_item": item},
+        )
+        return _fmt(data.get("inventory_item", data))
+    except Exception as e:
+        return _error(e)
 # ═══════════════════════════════════════════════════════════════════════════
 # METAFIELDS (SEO meta descriptions, meta titles, custom data)
 # ═══════════════════════════════════════════════════════════════════════════
