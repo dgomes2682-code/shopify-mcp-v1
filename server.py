@@ -1241,6 +1241,91 @@ async def shopify_update_collection(params: UpdateCollectionInput) -> str:
     except Exception as e:
         return _error(e)
 
+# ═══════════════════════════════════════════════════════════════════════════
+# COLLECTIONS — CREATE, ADD/REMOVE PRODUCTS
+# ═══════════════════════════════════════════════════════════════════════════
+
+class CreateCollectionInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    title: str = Field(..., min_length=1, description="Collection title")
+    body_html: Optional[str] = Field(default=None, description="Collection description in HTML")
+    handle: Optional[str] = Field(default=None, description="URL handle/slug (auto-generated if omitted)")
+    published: Optional[bool] = Field(default=True, description="True to publish immediately, False to hide")
+    sort_order: Optional[str] = Field(default=None, description="manual, best-selling, alpha-asc, alpha-desc, price-asc, price-desc, created, created-desc")
+    image_src: Optional[str] = Field(default=None, description="URL of the collection image")
+    image_alt: Optional[str] = Field(default=None, description="Alt text for the collection image")
+
+@mcp.tool(
+    name="shopify_create_collection",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": False, "openWorldHint": True},
+)
+async def shopify_create_collection(params: CreateCollectionInput) -> str:
+    """Create a new custom collection."""
+    try:
+        collection: Dict[str, Any] = {"title": params.title}
+        for field in ["body_html", "handle", "published", "sort_order"]:
+            val = getattr(params, field)
+            if val is not None:
+                collection[field] = val
+        if params.image_src:
+            collection["image"] = {"src": params.image_src}
+            if params.image_alt:
+                collection["image"]["alt"] = params.image_alt
+        data = await _request("POST", "custom_collections.json", body={"custom_collection": collection})
+        return _fmt(data.get("custom_collection", data))
+    except Exception as e:
+        return _error(e)
+
+
+class AddProductToCollectionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    collection_id: int = Field(..., description="Collection ID to add the product to")
+    product_id: int = Field(..., description="Product ID to add")
+
+@mcp.tool(
+    name="shopify_add_product_to_collection",
+    annotations={"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
+)
+async def shopify_add_product_to_collection(params: AddProductToCollectionInput) -> str:
+    """Add a product to a custom collection using a collect (join) record."""
+    try:
+        data = await _request(
+            "POST",
+            "collects.json",
+            body={"collect": {"collection_id": params.collection_id, "product_id": params.product_id}},
+        )
+        return _fmt(data.get("collect", data))
+    except Exception as e:
+        return _error(e)
+
+
+class RemoveProductFromCollectionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    collection_id: int = Field(..., description="Collection ID")
+    product_id: int = Field(..., description="Product ID to remove")
+
+@mcp.tool(
+    name="shopify_remove_product_from_collection",
+    annotations={"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True},
+)
+async def shopify_remove_product_from_collection(params: RemoveProductFromCollectionInput) -> str:
+    """Remove a product from a custom collection."""
+    try:
+        # First find the collect ID for this product+collection pair
+        data = await _request(
+            "GET",
+            "collects.json",
+            params={"collection_id": params.collection_id, "product_id": params.product_id},
+        )
+        collects = data.get("collects", [])
+        if not collects:
+            return f"Product {params.product_id} is not in collection {params.collection_id}."
+        collect_id = collects[0]["id"]
+        await _request("DELETE", f"collects/{collect_id}.json")
+        return f"Product {params.product_id} removed from collection {params.collection_id}."
+    except Exception as e:
+        return _error(e)
+
 # ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------
